@@ -57,6 +57,8 @@ import {
     ReferenceParams,
     RemoteWindow,
     RenameParams,
+    SemanticTokensParams,
+    SemanticTokensRequest,
     SignatureHelp,
     SignatureHelpParams,
     SymbolInformation,
@@ -118,6 +120,7 @@ import { HoverProvider } from './languageService/hoverProvider';
 import { canNavigateToFile } from './languageService/navigationUtils';
 import { ReferencesProvider } from './languageService/referencesProvider';
 import { RenameProvider } from './languageService/renameProvider';
+import { SemanticTokensProvider } from './languageService/semanticTokensProvider';
 import { SignatureHelpProvider } from './languageService/signatureHelpProvider';
 import { WorkspaceSymbolProvider } from './languageService/workspaceSymbolProvider';
 import { Localizer, setLocaleOverride } from './localization/localize';
@@ -460,6 +463,9 @@ export abstract class LanguageServerBase implements LanguageServerInterface, Dis
         this.connection.onHover(async (params, token) => this.onHover(params, token));
 
         this.connection.onDocumentHighlight(async (params, token) => this.onDocumentHighlight(params, token));
+        this.connection.onRequest(SemanticTokensRequest.type, async (params, token) =>
+            this.onSemanticTokens(params, token)
+        );
 
         this.connection.onSignatureHelp(async (params, token) => this.onSignatureHelp(params, token));
 
@@ -588,6 +594,16 @@ export abstract class LanguageServerBase implements LanguageServerInterface, Dis
                     workDoneProgress: true,
                 },
                 callHierarchyProvider: true,
+                semanticTokensProvider: {
+                    legend: {
+                        tokenTypes: SemanticTokensProvider.tokenTypes,
+                        tokenModifiers: SemanticTokensProvider.tokenModifiers,
+                    },
+                    range: false,
+                    full: {
+                        delta: false,
+                    },
+                },
                 workspace: {
                     workspaceFolders: {
                         supported: true,
@@ -809,6 +825,19 @@ export abstract class LanguageServerBase implements LanguageServerInterface, Dis
 
         return workspace.service.run((program) => {
             return new DocumentHighlightProvider(program, uri, params.position, token).getDocumentHighlight();
+        }, token);
+    }
+
+    protected async onSemanticTokens(params: SemanticTokensParams, token: CancellationToken) {
+        const uri = this.convertLspUriStringToUri(params.textDocument.uri);
+
+        const workspace = await this.getWorkspaceForFile(uri);
+        if (workspace.disableLanguageServices) {
+            return;
+        }
+
+        return workspace.service.run((program) => {
+            return new SemanticTokensProvider(program, uri, token).getSemanticTokens();
         }, token);
     }
 
