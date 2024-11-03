@@ -163,6 +163,16 @@ class SemanticTokensTreeWalker extends ParseTreeWalker {
         return false;
     }
 
+    private _isClassMemberAccess(node: NameNode): boolean {
+        if (node.parent?.nodeType === ParseNodeType.MemberAccess && node === node.parent.d.member) {
+            const leftType = this._evaluator.getType(node.parent.d.leftExpr);
+            if (leftType && this._evaluator.makeTopLevelTypeVarsConcrete(leftType)?.category === TypeCategory.Class) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private _getType(node: ExpressionNode) {
         // It does common work necessary for hover for a type we got
         // from raw type evaluator.
@@ -250,9 +260,7 @@ class SemanticTokensTreeWalker extends ParseTreeWalker {
                     }
                 }
 
-                // Determine if this is a variable that has been declared in a class,
-                // i.e. a class or member variable, and mark it as a property
-                if (getEnclosingClass(declaration.node, /*stopAtFunction*/ true)) {
+                if (getEnclosingClass(declaration.node, /*stopAtFunction*/ true) || this._isClassMemberAccess(node)) {
                     declarationType = TokenType.property;
                     break;
                 }
