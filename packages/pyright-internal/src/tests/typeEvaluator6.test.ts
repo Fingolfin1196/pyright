@@ -96,7 +96,12 @@ test('OverloadOverride1', () => {
 
 test('OverloadImpl1', () => {
     const analysisResults = TestUtils.typeAnalyzeSampleFiles(['overloadImpl1.py']);
-    TestUtils.validateResults(analysisResults, 7);
+    TestUtils.validateResults(analysisResults, 6);
+});
+
+test('OverloadImpl2', () => {
+    const analysisResults = TestUtils.typeAnalyzeSampleFiles(['overloadImpl2.py']);
+    TestUtils.validateResults(analysisResults, 1);
 });
 
 test('OverloadOverlap1', () => {
@@ -513,6 +518,14 @@ test('MatchClass6', () => {
     configOptions.defaultPythonVersion = pythonVersion3_10;
     const analysisResults = TestUtils.typeAnalyzeSampleFiles(['matchClass6.py'], configOptions);
     TestUtils.validateResults(analysisResults, 0);
+});
+
+test('MatchClass7', () => {
+    const configOptions = new ConfigOptions(Uri.empty());
+
+    configOptions.defaultPythonVersion = pythonVersion3_10;
+    const analysisResults = TestUtils.typeAnalyzeSampleFiles(['matchClass7.py'], configOptions);
+    TestUtils.validateResults(analysisResults, 1);
 });
 
 test('MatchValue1', () => {

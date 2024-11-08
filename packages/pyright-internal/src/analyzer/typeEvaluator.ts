@@ -3693,10 +3693,11 @@ export function createTypeEvaluator(
                     const inheritedSlotsNames = ClassType.getInheritedSlotsNames(memberClass);
 
                     if (inheritedSlotsNames && memberClass.shared.localSlotsNames) {
-                        // Skip this check if the local slots is specified but empty because this pattern
-                        // is used in a legitimate manner for mix-in classes.
+                        // Skip this check if the local slots is specified but empty
+                        // and the class isn't final. This pattern is used in a
+                        // legitimate manner for mix-in classes.
                         if (
-                            memberClass.shared.localSlotsNames.length > 0 &&
+                            (memberClass.shared.localSlotsNames.length > 0 || ClassType.isFinal(memberClass)) &&
                             !inheritedSlotsNames.some((name) => name === memberName)
                         ) {
                             // Determine whether the assignment corresponds to a descriptor
@@ -4417,7 +4418,7 @@ export function createTypeEvaluator(
         }
     }
 
-    function verifyRaiseExceptionType(node: ExpressionNode) {
+    function verifyRaiseExceptionType(node: ExpressionNode, allowNone: boolean) {
         const baseExceptionType = getBuiltInType(node, 'BaseException');
         const exceptionType = getTypeOfExpression(node).type;
 
@@ -4430,7 +4431,11 @@ export function createTypeEvaluator(
             doForEachSubtype(exceptionType, (subtype) => {
                 const concreteSubtype = makeTopLevelTypeVarsConcrete(subtype);
 
-                if (isAnyOrUnknown(concreteSubtype) || isNever(concreteSubtype) || isNoneInstance(concreteSubtype)) {
+                if (isAnyOrUnknown(concreteSubtype) || isNever(concreteSubtype)) {
+                    return;
+                }
+
+                if (allowNone && isNoneInstance(concreteSubtype)) {
                     return;
                 }
 
@@ -23911,7 +23916,7 @@ export function createTypeEvaluator(
                 effectiveFlags = flags | AssignTypeFlags.RetainLiteralsForTypeVar;
                 errorSource = LocAddendum.typeVarIsCovariant;
             } else if (variance === Variance.Contravariant) {
-                effectiveFlags = (flags ^ AssignTypeFlags.Contravariant) | AssignTypeFlags.RetainLiteralsForTypeVar;
+                effectiveFlags = flags | AssignTypeFlags.Contravariant | AssignTypeFlags.RetainLiteralsForTypeVar;
                 errorSource = LocAddendum.typeVarIsContravariant;
             } else {
                 effectiveFlags = flags | AssignTypeFlags.Invariant | AssignTypeFlags.RetainLiteralsForTypeVar;
