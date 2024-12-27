@@ -2412,11 +2412,12 @@ export function createTypeEvaluator(
         classType: ClassType,
         memberName: string,
         selfType?: ClassType | TypeVarType | undefined,
+        errorNode?: ExpressionNode | undefined,
         diag?: DiagnosticAddendum,
         recursionCount = 0
     ): FunctionType | OverloadedType | undefined {
         const boundMethodResult = getTypeOfBoundMember(
-            /* errorNode */ undefined,
+            errorNode,
             classType,
             memberName,
             /* usage */ undefined,
@@ -2443,7 +2444,8 @@ export function createTypeEvaluator(
             return getBoundMagicMethod(
                 boundMethodResult.type,
                 '__call__',
-                selfType ?? ClassType.cloneAsInstance(classType),
+                /* selfType */ undefined,
+                errorNode,
                 diag,
                 recursionCount
             );
@@ -4360,7 +4362,7 @@ export function createTypeEvaluator(
                 let annotationType: Type | undefined = getTypeOfAnnotation(target.d.annotation, {
                     varTypeAnnotation: true,
                     allowFinal: ParseTreeUtils.isFinalAllowedForAssignmentTarget(target.d.valueExpr),
-                    allowClassVar: ParseTreeUtils.isClassVarAllowedForAssignmentTarget(target.d.valueExpr),
+                    allowClassVar: isClassVarAllowedForAssignmentTarget(target.d.valueExpr),
                 });
 
                 if (annotationType) {
@@ -4431,6 +4433,21 @@ export function createTypeEvaluator(
                 break;
             }
         }
+    }
+
+    function isClassVarAllowedForAssignmentTarget(targetNode: ExpressionNode): boolean {
+        const classNode = ParseTreeUtils.getEnclosingClass(targetNode, /* stopAtFunction */ true);
+        if (!classNode) {
+            return false;
+        }
+
+        // ClassVar is not allowed in a TypedDict or a NamedTuple class.
+        const classType = getTypeOfClass(classNode)?.classType;
+        if (!classType) {
+            return false;
+        }
+
+        return !ClassType.isTypedDictClass(classType) && !classType.shared.namedTupleEntries;
     }
 
     function verifyRaiseExceptionType(node: ExpressionNode, allowNone: boolean) {
@@ -7724,15 +7741,18 @@ export function createTypeEvaluator(
         }
 
         const transformedType = transformPossibleRecursiveTypeAlias(type);
+        const isRecursiveTypeAlias = transformedType !== type;
 
         // If this is a recursive type alias, see if we've already recursed
         // seen it once before in the recursion stack. If so, don't recurse
         // further.
-        if (transformedType !== type) {
+        if (isRecursiveTypeAlias) {
             const pendingOverlaps = pendingTypes.filter((pendingType) => isTypeSame(pendingType, type));
             if (pendingOverlaps.length > 1) {
                 return;
             }
+
+            pendingTypes.push(type);
         }
 
         recursionCount++;
@@ -7744,8 +7764,6 @@ export function createTypeEvaluator(
                 if (typeParamIndex >= 0) {
                     usageVariances[typeParamIndex] = combineVariances(usageVariances[typeParamIndex], variance);
                 } else {
-                    pendingTypes.push(type);
-
                     updateUsageVariancesRecursive(
                         subtype,
                         typeAliasTypeParams,
@@ -7754,8 +7772,6 @@ export function createTypeEvaluator(
                         pendingTypes,
                         recursionCount
                     );
-
-                    pendingTypes.pop();
                 }
             });
         }
@@ -7803,6 +7819,10 @@ export function createTypeEvaluator(
                 }
             }
         });
+
+        if (isRecursiveTypeAlias) {
+            pendingTypes.pop();
+        }
     }
 
     function getIndexAccessMagicMethodName(usage: EvaluatorUsage): string {
@@ -13458,7 +13478,7 @@ export function createTypeEvaluator(
             const concreteSubtype = makeTopLevelTypeVarsConcrete(subtype);
 
             if (isClass(concreteSubtype)) {
-                magicMethodType = getBoundMagicMethod(concreteSubtype, methodName, subtype, diag);
+                magicMethodType = getBoundMagicMethod(concreteSubtype, methodName, subtype, errorNode, diag);
             }
 
             if (magicMethodType) {
@@ -15019,23 +15039,45 @@ export function createTypeEvaluator(
     }
 
     function getTypeOfSlice(node: SliceNode): TypeResult {
+        const noneType = getNoneType();
+        let startType = noneType;
+        let endType = noneType;
+        let stepType = noneType;
+        let isIncomplete = false;
+
         // Evaluate the expressions to report errors and record symbol
-        // references. We can skip this if we're executing speculatively.
-        if (!isSpeculativeModeInUse(node)) {
-            if (node.d.startValue) {
-                getTypeOfExpression(node.d.startValue);
-            }
-
-            if (node.d.endValue) {
-                getTypeOfExpression(node.d.endValue);
-            }
-
-            if (node.d.stepValue) {
-                getTypeOfExpression(node.d.stepValue);
+        // references.
+        if (node.d.startValue) {
+            const startTypeResult = getTypeOfExpression(node.d.startValue);
+            startType = startTypeResult.type;
+            if (startTypeResult.isIncomplete) {
+                isIncomplete = true;
             }
         }
 
-        return { type: getBuiltInObject(node, 'slice') };
+        if (node.d.endValue) {
+            const endTypeResult = getTypeOfExpression(node.d.endValue);
+            endType = endTypeResult.type;
+            if (endTypeResult.isIncomplete) {
+                isIncomplete = true;
+            }
+        }
+
+        if (node.d.stepValue) {
+            const stepTypeResult = getTypeOfExpression(node.d.stepValue);
+            stepType = stepTypeResult.type;
+            if (stepTypeResult.isIncomplete) {
+                isIncomplete = true;
+            }
+        }
+
+        const sliceType = getBuiltInObject(node, 'slice');
+
+        if (!isClassInstance(sliceType)) {
+            return { type: sliceType };
+        }
+
+        return { type: ClassType.specialize(sliceType, [startType, endType, stepType]), isIncomplete };
     }
 
     // Verifies that a type argument's type is not disallowed.
@@ -15584,7 +15626,7 @@ export function createTypeEvaluator(
         flags: EvalFlags
     ) {
         // Self doesn't support any type arguments.
-        if (typeArgs) {
+        if (typeArgs && typeArgs.length > 0) {
             addDiagnostic(
                 DiagnosticRule.reportInvalidTypeArguments,
                 LocMessage.typeArgsExpectingNone().format({
@@ -18358,7 +18400,6 @@ export function createTypeEvaluator(
         // Set the "partially evaluated" flag around this logic to detect recursion.
         functionType.shared.flags |= FunctionTypeFlags.PartiallyEvaluated;
         const preDecoratedType = node.d.isAsync ? createAsyncFunction(node, functionType) : functionType;
-        functionType.shared.flags &= ~FunctionTypeFlags.PartiallyEvaluated;
 
         // Apply all of the decorators in reverse order.
         decoratedType = preDecoratedType;
@@ -18405,6 +18446,10 @@ export function createTypeEvaluator(
         decoratedType = addOverloadsToFunctionType(evaluatorInterface, node, decoratedType);
 
         writeTypeCache(node, { type: decoratedType }, EvalFlags.None);
+
+        // Now that the decorator has been applied, we can clear the
+        // "partially evaluated" flag.
+        functionType.shared.flags &= ~FunctionTypeFlags.PartiallyEvaluated;
 
         return { functionType, decoratedType };
     }
@@ -19474,7 +19519,8 @@ export function createTypeEvaluator(
                     getTypeOfIterator(
                         { type: exceptionType, isIncomplete: exceptionTypeResult.isIncomplete },
                         /* isAsync */ false,
-                        errorNode
+                        errorNode,
+                        /* emitNotIterableError */ false
                     )?.type ?? UnknownType.create();
 
                 return mapSubtypes(iterableType, (subtype) => {
@@ -19903,7 +19949,7 @@ export function createTypeEvaluator(
             const annotationType = getTypeOfAnnotation(node.d.annotation, {
                 varTypeAnnotation: true,
                 allowFinal: ParseTreeUtils.isFinalAllowedForAssignmentTarget(node.d.valueExpr),
-                allowClassVar: ParseTreeUtils.isClassVarAllowedForAssignmentTarget(node.d.valueExpr),
+                allowClassVar: isClassVarAllowedForAssignmentTarget(node.d.valueExpr),
             });
 
             writeTypeCache(node.d.valueExpr, { type: annotationType }, EvalFlags.None);
@@ -20052,7 +20098,7 @@ export function createTypeEvaluator(
                     getTypeOfAnnotation(annotationNode, {
                         varTypeAnnotation: true,
                         allowFinal: ParseTreeUtils.isFinalAllowedForAssignmentTarget(annotationParent.d.leftExpr),
-                        allowClassVar: ParseTreeUtils.isClassVarAllowedForAssignmentTarget(annotationParent.d.leftExpr),
+                        allowClassVar: isClassVarAllowedForAssignmentTarget(annotationParent.d.leftExpr),
                     });
                 } else {
                     evaluateTypesForAssignmentStatement(annotationParent);
@@ -22055,7 +22101,7 @@ export function createTypeEvaluator(
                             declaration.node.parent?.nodeType === ParseNodeType.MemberAccess
                                 ? declaration.node.parent
                                 : declaration.node;
-                        const allowClassVar = ParseTreeUtils.isClassVarAllowedForAssignmentTarget(declNode);
+                        const allowClassVar = isClassVarAllowedForAssignmentTarget(declNode);
                         const allowFinal = ParseTreeUtils.isFinalAllowedForAssignmentTarget(declNode);
                         const allowRequired =
                             ParseTreeUtils.isRequiredAllowedForAssignmentTarget(declNode) ||
@@ -24490,29 +24536,6 @@ export function createTypeEvaluator(
 
                 diag?.addMessage(LocAddendum.typeAssignmentMismatch().format(printSrcDestTypes(srcType, destType)));
                 return false;
-            } else if (isClassInstance(expandedSrcType) && isMetaclassInstance(expandedSrcType)) {
-                // If the source is a metaclass instance, verify that it's compatible with
-                // the metaclass of the instantiable dest type.
-                const destMetaclass = destType.shared.effectiveMetaclass;
-
-                if (destMetaclass && isInstantiableClass(destMetaclass)) {
-                    if (
-                        assignClass(
-                            destMetaclass,
-                            ClassType.cloneAsInstantiable(expandedSrcType),
-                            diag,
-                            constraints,
-                            flags,
-                            recursionCount,
-                            /* reportErrorsUsingObjType */ false
-                        )
-                    ) {
-                        return true;
-                    }
-
-                    diag?.addMessage(LocAddendum.typeAssignmentMismatch().format(printSrcDestTypes(srcType, destType)));
-                    return false;
-                }
             }
         }
 
@@ -24729,6 +24752,7 @@ export function createTypeEvaluator(
                     concreteSrcType,
                     '__call__',
                     /* selfType */ undefined,
+                    /* errorNode */ undefined,
                     /* diag */ undefined,
                     recursionCount
                 );
@@ -25658,6 +25682,7 @@ export function createTypeEvaluator(
             objType,
             '__call__',
             /* selfType */ undefined,
+            /* errorNode */ undefined,
             /* diag */ undefined,
             recursionCount
         );
@@ -26451,6 +26476,16 @@ export function createTypeEvaluator(
             }
         }
 
+        // If we're checking for full overlapping overloads and the source is
+        // a gradual form, the dest must also be a gradual form.
+        if (
+            (flags & AssignTypeFlags.OverloadOverlap) !== 0 &&
+            FunctionType.isGradualCallableForm(srcType) &&
+            !FunctionType.isGradualCallableForm(destType)
+        ) {
+            canAssign = false;
+        }
+
         // If the source and the dest are using the same ParamSpec, any additional
         // concatenated parameters must match.
         if (targetIncludesParamSpec && srcParamSpec?.priv.nameWithScope === destParamSpec?.priv.nameWithScope) {
@@ -26490,21 +26525,32 @@ export function createTypeEvaluator(
                         if (p.name) {
                             matchedParamCount++;
                         }
-                    } else if (isPositionOnlySeparator(p) && remainingParams.length === 0) {
+
+                        // If this is a *args parameter, assume that it provides
+                        // the remaining positional parameters, but also assume
+                        // that it is not exhausted and can provide additional
+                        // parameters.
+                        if (p.category !== ParamCategory.ArgsList) {
+                            return;
+                        }
+                    }
+
+                    if (isPositionOnlySeparator(p) && remainingParams.length === 0) {
                         // Don't bother pushing a position-only separator if it
                         // is the first remaining param.
-                    } else {
-                        remainingParams.push(
-                            FunctionParam.create(
-                                p.category,
-                                FunctionType.getParamType(effectiveSrcType, index),
-                                p.flags,
-                                p.name,
-                                FunctionType.getParamDefaultType(effectiveSrcType, index),
-                                p.defaultExpr
-                            )
-                        );
+                        return;
                     }
+
+                    remainingParams.push(
+                        FunctionParam.create(
+                            p.category,
+                            FunctionType.getParamType(effectiveSrcType, index),
+                            p.flags,
+                            p.name,
+                            FunctionType.getParamDefaultType(effectiveSrcType, index),
+                            p.defaultExpr
+                        )
+                    );
                 });
 
                 // If there are remaining parameters and the source and dest do not contain
