@@ -11,9 +11,11 @@ import { isCallableType, isMaybeDescriptorInstance } from '../analyzer/typeUtils
 import {
     ClassType,
     FunctionType,
+    TypeBase,
     TypeCategory,
     UnknownType,
     getTypeAliasInfo,
+    isAnyOrUnknown,
     isFunction,
     isModule,
     isOverloaded,
@@ -248,6 +250,10 @@ class SemanticTokensTreeWalker extends ParseTreeWalker {
                 // the type alias when printing the type information.
                 const type = this._evaluator.getType(typeNode);
 
+                if (type && !isAnyOrUnknown(type) && TypeBase.isInstantiable(type)) {
+                    declarationType = TokenType.type;
+                    break;
+                }
                 if (type?.props?.typeAliasInfo && typeNode.nodeType === ParseNodeType.Name) {
                     const typeAliasInfo = getTypeAliasInfo(type);
                     if (typeAliasInfo?.shared.name === typeNode.d.value) {
