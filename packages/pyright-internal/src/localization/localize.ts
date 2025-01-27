@@ -698,6 +698,7 @@ export namespace Localizer {
         export const noneNotIterable = () => getRawString('Diagnostic.noneNotIterable');
         export const noneNotSubscriptable = () => getRawString('Diagnostic.noneNotSubscriptable');
         export const noneNotUsableWith = () => getRawString('Diagnostic.noneNotUsableWith');
+        export const noneNotUsableWithAsync = () => getRawString('Diagnostic.noneNotUsableWithAsync');
         export const noneOperator = () =>
             new ParameterizedString<{ operator: string }>(getRawString('Diagnostic.noneOperator'));
         export const noneUnknownMember = () =>
@@ -746,16 +747,14 @@ export namespace Localizer {
             new ParameterizedString<{ name: string }>(getRawString('Diagnostic.overloadAbstractImplMismatch'));
         export const overloadClassMethodInconsistent = () =>
             new ParameterizedString<{ name: string }>(getRawString('Diagnostic.overloadClassMethodInconsistent'));
-        export const overloadFinalInconsistencyImpl = () =>
-            new ParameterizedString<{ name: string }>(getRawString('Diagnostic.overloadFinalInconsistencyImpl'));
-        export const overloadFinalInconsistencyNoImpl = () =>
-            new ParameterizedString<{ name: string; index: number }>(
-                getRawString('Diagnostic.overloadFinalInconsistencyNoImpl')
-            );
+        export const overloadFinalImpl = () => getRawString('Diagnostic.overloadFinalImpl');
+        export const overloadFinalNoImpl = () => getRawString('Diagnostic.overloadFinalNoImpl');
         export const overloadImplementationMismatch = () =>
             new ParameterizedString<{ name: string; index: number }>(
                 getRawString('Diagnostic.overloadImplementationMismatch')
             );
+        export const overloadOverrideImpl = () => getRawString('Diagnostic.overloadOverrideImpl');
+        export const overloadOverrideNoImpl = () => getRawString('Diagnostic.overloadOverrideNoImpl');
         export const overloadReturnTypeMismatch = () =>
             new ParameterizedString<{ name: string; newIndex: number; prevIndex: number }>(
                 getRawString('Diagnostic.overloadReturnTypeMismatch')
@@ -810,6 +809,7 @@ export namespace Localizer {
         export const patternNeverMatches = () =>
             new ParameterizedString<{ type: string }>(getRawString('Diagnostic.patternNeverMatches'));
         export const positionArgAfterNamedArg = () => getRawString('Diagnostic.positionArgAfterNamedArg');
+        export const positionArgAfterUnpackedDictArg = () => getRawString('Diagnostic.positionArgAfterUnpackedDictArg');
         export const privateImportFromPyTypedModule = () =>
             new ParameterizedString<{ name: string; module: string }>(
                 getRawString('Diagnostic.privateImportFromPyTypedModule')
@@ -1037,6 +1037,10 @@ export namespace Localizer {
             new ParameterizedString<{ type: string }>(getRawString('Diagnostic.typeNotSubscriptable'));
         export const typeNotUsableWith = () =>
             new ParameterizedString<{ type: string; method: string }>(getRawString('Diagnostic.typeNotUsableWith'));
+        export const typeNotUsableWithAsync = () =>
+            new ParameterizedString<{ type: string; method: string }>(
+                getRawString('Diagnostic.typeNotUsableWithAsync')
+            );
         export const typeNotSupportBinaryOperator = () =>
             new ParameterizedString<{ leftType: string; rightType: string; operator: string }>(
                 getRawString('Diagnostic.typeNotSupportBinaryOperator')

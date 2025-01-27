@@ -246,12 +246,8 @@ export function getTypeNarrowingCallback(
                     const rightTypeResult = evaluator.getTypeOfExpression(testExpression.d.rightExpr);
                     const rightType = rightTypeResult.type;
 
-                    // Look for "X is Y" or "X is not Y" where Y is a an enum or bool literal.
-                    if (
-                        isClassInstance(rightType) &&
-                        (ClassType.isEnumClass(rightType) || ClassType.isBuiltIn(rightType, 'bool')) &&
-                        rightType.priv.literalValue !== undefined
-                    ) {
+                    // Look for "X is Y" or "X is not Y" where Y is a literal.
+                    if (isClassInstance(rightType) && rightType.priv.literalValue !== undefined) {
                         return (type: Type) => {
                             return {
                                 type: narrowTypeForLiteralComparison(
@@ -1249,20 +1245,15 @@ function narrowTypeForInstanceOrSubclassInternal(
         if (!isInstanceCheck) {
             const isTypeInstance = isClassInstance(subtype) && ClassType.isBuiltIn(subtype, 'type');
 
+            // Handle metaclass instances specially.
             if (isMetaclassInstance(subtype) && !isTypeInstance) {
-                // Handle metaclass instances specially.
                 adjFilterTypes = filterTypes.map((filterType) => convertToInstantiable(filterType));
             } else {
-                const convSubtype = convertToInstance(subtype);
+                adjSubtype = convertToInstance(subtype);
 
-                // Handle type[Any] specially for this case.
-                if (isClassInstance(subtype) && ClassType.isBuiltIn(subtype, 'type') && isAnyOrUnknown(convSubtype)) {
-                    adjSubtype = convertToInstance(evaluator.getObjectType());
-                } else {
-                    adjSubtype = convSubtype;
+                if (!isAnyOrUnknown(subtype) || isPositiveTest) {
+                    resultRequiresAdj = true;
                 }
-
-                resultRequiresAdj = true;
             }
         }
 
@@ -1276,7 +1267,18 @@ function narrowTypeForInstanceOrSubclassInternal(
             errorNode
         );
 
-        return resultRequiresAdj ? convertToInstantiable(narrowedResult) : narrowedResult;
+        if (!resultRequiresAdj) {
+            return narrowedResult;
+        }
+
+        if (isAnyOrUnknown(narrowedResult)) {
+            const typeClass = evaluator.getTypeClassType();
+            if (typeClass) {
+                return ClassType.specialize(ClassType.cloneAsInstance(typeClass), [narrowedResult]);
+            }
+        }
+
+        return convertToInstantiable(narrowedResult);
     });
 
     return result;
@@ -2489,10 +2491,15 @@ function narrowTypeForLiteralComparison(
         } else if (isClassInstance(subtype) && ClassType.isSameGenericClass(literalType, subtype)) {
             if (subtype.priv.literalValue !== undefined) {
                 const literalValueMatches = ClassType.isLiteralValueSame(subtype, literalType);
-                if ((literalValueMatches && !isPositiveTest) || (!literalValueMatches && isPositiveTest)) {
-                    return undefined;
+                if (isPositiveTest) {
+                    return literalValueMatches ? subtype : undefined;
+                } else {
+                    const isEnumOrBool = ClassType.isEnumClass(literalType) || ClassType.isBuiltIn(literalType, 'bool');
+
+                    // For negative tests, we can eliminate the literal value if it doesn't match,
+                    // but only for equality tests or for 'is' tests that involve enums or bools.
+                    return literalValueMatches && (isEnumOrBool || !isIsOperator) ? undefined : subtype;
                 }
-                return subtype;
             } else if (isPositiveTest) {
                 return literalType;
             } else {

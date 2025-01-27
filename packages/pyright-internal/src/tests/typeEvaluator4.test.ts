@@ -829,7 +829,7 @@ test('ParamSpec48', () => {
 
 test('ParamSpec49', () => {
     const results = TestUtils.typeAnalyzeSampleFiles(['paramSpec49.py']);
-    TestUtils.validateResults(results, 7);
+    TestUtils.validateResults(results, 8);
 });
 
 test('ParamSpec50', () => {
@@ -855,6 +855,11 @@ test('ParamSpec53', () => {
 test('ParamSpec54', () => {
     const results = TestUtils.typeAnalyzeSampleFiles(['paramSpec54.py']);
     TestUtils.validateResults(results, 0);
+});
+
+test('ParamSpec55', () => {
+    const results = TestUtils.typeAnalyzeSampleFiles(['paramSpec55.py']);
+    TestUtils.validateResults(results, 1);
 });
 
 test('Slice1', () => {

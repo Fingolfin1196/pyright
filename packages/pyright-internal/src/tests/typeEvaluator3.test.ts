@@ -946,7 +946,7 @@ test('MethodOverride1', () => {
 
     configOptions.diagnosticRuleSet.reportIncompatibleMethodOverride = 'error';
     analysisResults = TestUtils.typeAnalyzeSampleFiles(['methodOverride1.py'], configOptions);
-    TestUtils.validateResults(analysisResults, 40);
+    TestUtils.validateResults(analysisResults, 42);
 });
 
 test('MethodOverride2', () => {
@@ -1078,6 +1078,12 @@ test('Enum12', () => {
 
 test('Enum13', () => {
     const analysisResults = TestUtils.typeAnalyzeSampleFiles(['enum13.py']);
+
+    TestUtils.validateResults(analysisResults, 3);
+});
+
+test('Enum14', () => {
+    const analysisResults = TestUtils.typeAnalyzeSampleFiles(['enum14.py']);
 
     TestUtils.validateResults(analysisResults, 3);
 });

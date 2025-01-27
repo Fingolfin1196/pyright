@@ -39,6 +39,11 @@ test('Overload4', () => {
     TestUtils.validateResults(analysisResults, 0);
 });
 
+test('Overload5', () => {
+    const analysisResults = TestUtils.typeAnalyzeSampleFiles(['overload5.py']);
+    TestUtils.validateResults(analysisResults, 6);
+});
+
 test('OverloadCall1', () => {
     const analysisResults = TestUtils.typeAnalyzeSampleFiles(['overloadCall1.py']);
     TestUtils.validateResults(analysisResults, 0);
@@ -847,6 +852,12 @@ test('Constructor32', () => {
     const analysisResults = TestUtils.typeAnalyzeSampleFiles(['constructor32.py']);
 
     TestUtils.validateResults(analysisResults, 1);
+});
+
+test('Constructor33', () => {
+    const analysisResults = TestUtils.typeAnalyzeSampleFiles(['constructor33.py']);
+
+    TestUtils.validateResults(analysisResults, 0);
 });
 
 test('ConstructorCallable1', () => {

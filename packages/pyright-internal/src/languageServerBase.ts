@@ -242,7 +242,7 @@ export abstract class LanguageServerBase implements LanguageServerInterface, Dis
         this._workspaceFoldersChangedDisposable?.dispose();
     }
 
-    abstract createBackgroundAnalysis(serviceId: string): BackgroundAnalysisBase | undefined;
+    abstract createBackgroundAnalysis(serviceId: string, workspaceRoot: Uri): BackgroundAnalysisBase | undefined;
 
     abstract getSettings(workspace: Workspace): Promise<ServerSettings>;
 
@@ -250,6 +250,7 @@ export abstract class LanguageServerBase implements LanguageServerInterface, Dis
     // program within a workspace.
     createAnalyzerService(
         name: string,
+        workspaceRoot: Uri,
         services?: WorkspaceServices,
         libraryReanalysisTimeProvider?: LibraryReanalysisTimeProvider
     ): AnalyzerService {
@@ -260,7 +261,9 @@ export abstract class LanguageServerBase implements LanguageServerInterface, Dis
             console: this.console,
             hostFactory: this.createHost.bind(this),
             importResolverFactory: this.createImportResolver.bind(this),
-            backgroundAnalysis: services ? services.backgroundAnalysis : this.createBackgroundAnalysis(serviceId),
+            backgroundAnalysis: services
+                ? services.backgroundAnalysis
+                : this.createBackgroundAnalysis(serviceId, workspaceRoot),
             maxAnalysisTime: this.serverOptions.maxAnalysisTimeInForeground,
             backgroundAnalysisProgramFactory: this.createBackgroundAnalysisProgram.bind(this),
             cancellationProvider: this.serverOptions.cancellationProvider,
@@ -1155,6 +1158,7 @@ export abstract class LanguageServerBase implements LanguageServerInterface, Dis
 
         // Stop tracking all open files.
         this.openFileMap.clear();
+        this.serviceProvider.dispose();
 
         return Promise.resolve();
     }
@@ -1251,14 +1255,14 @@ export abstract class LanguageServerBase implements LanguageServerInterface, Dis
 
     protected createAnalyzerServiceForWorkspace(
         name: string,
-        uri: Uri,
+        workspaceRoot: Uri,
         kinds: string[],
         services?: WorkspaceServices
     ): AnalyzerService {
         // 5 seconds default
         const defaultBackOffTime = 5 * 1000;
 
-        return this.createAnalyzerService(name, services, () => defaultBackOffTime);
+        return this.createAnalyzerService(name, workspaceRoot, services, () => defaultBackOffTime);
     }
 
     protected recordUserInteractionTime() {

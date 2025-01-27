@@ -5892,34 +5892,18 @@ export class Checker extends ParseTreeWalker {
 
         if (isFunction(overriddenType) || isOverloaded(overriddenType)) {
             const diagAddendum = new DiagnosticAddendum();
-            let overrideFunction: FunctionType | undefined;
 
-            if (isFunction(overrideType)) {
-                overrideFunction = overrideType;
-            } else if (isOverloaded(overrideType)) {
-                // Use the last overload.
-                const impl = OverloadedType.getImplementation(overrideType);
-
-                // If the last overload isn't an implementation, skip the check for this symbol.
-                if (!impl || !isFunction(impl)) {
-                    return;
-                }
-
-                overrideFunction = impl;
-            }
-
-            if (overrideFunction) {
+            if (isFunction(overrideType) || isOverloaded(overrideType)) {
                 if (
                     !this._evaluator.validateOverrideMethod(
                         overriddenType,
-                        overrideFunction,
+                        overrideType,
                         /* baseClass */ undefined,
                         diagAddendum,
                         /* enforceParamNameMatch */ true
                     )
                 ) {
-                    const decl = overrideFunction.shared.declaration;
-                    if (decl && decl.type === DeclarationType.Function) {
+                    if (overrideDecl && overrideDecl.type === DeclarationType.Function) {
                         diag = this._evaluator.addDiagnostic(
                             DiagnosticRule.reportIncompatibleMethodOverride,
                             LocMessage.baseClassMethodTypeIncompatible().format({
@@ -6228,7 +6212,7 @@ export class Checker extends ParseTreeWalker {
             const overloads = OverloadedType.getOverloads(typeOfSymbol);
             const implementation = OverloadedType.getImplementation(typeOfSymbol);
 
-            this._validateOverloadFinalConsistency(overloads, implementation);
+            this._validateOverloadFinalOverride(overloads, implementation);
 
             this._validateOverloadAbstractConsistency(overloads, implementation);
         });
@@ -6280,42 +6264,52 @@ export class Checker extends ParseTreeWalker {
         });
     }
 
-    private _validateOverloadFinalConsistency(overloads: FunctionType[], implementation: Type | undefined) {
-        // If there's an implementation, it will determine whether the
-        // function is @final.
-        if (implementation && isFunction(implementation)) {
-            // If one or more of the overloads is marked @final but the
-            // implementation is not, report an error.
-            if (!FunctionType.isFinal(implementation)) {
-                overloads.forEach((overload) => {
-                    if (FunctionType.isFinal(overload) && overload.shared.declaration?.node) {
-                        this._evaluator.addDiagnostic(
-                            DiagnosticRule.reportInconsistentOverload,
-                            LocMessage.overloadFinalInconsistencyImpl().format({
-                                name: overload.shared.name,
-                            }),
-                            getNameNodeForDeclaration(overload.shared.declaration) ?? overload.shared.declaration.node
-                        );
-                    }
-                });
-            }
-            return;
-        }
-
-        if (overloads.length > 0 && !FunctionType.isFinal(overloads[0])) {
-            overloads.slice(1).forEach((overload, index) => {
+    private _validateOverloadFinalOverride(overloads: FunctionType[], implementation: Type | undefined) {
+        // If there's an implementation, the overloads are not allowed to be marked final or override.
+        if (implementation) {
+            overloads.forEach((overload) => {
                 if (FunctionType.isFinal(overload) && overload.shared.declaration?.node) {
                     this._evaluator.addDiagnostic(
                         DiagnosticRule.reportInconsistentOverload,
-                        LocMessage.overloadFinalInconsistencyNoImpl().format({
-                            name: overload.shared.name,
-                            index: index + 2,
-                        }),
+                        LocMessage.overloadFinalImpl(),
+                        getNameNodeForDeclaration(overload.shared.declaration) ?? overload.shared.declaration.node
+                    );
+                }
+
+                if (FunctionType.isOverridden(overload) && overload.shared.declaration?.node) {
+                    this._evaluator.addDiagnostic(
+                        DiagnosticRule.reportInconsistentOverload,
+                        LocMessage.overloadOverrideImpl(),
                         getNameNodeForDeclaration(overload.shared.declaration) ?? overload.shared.declaration.node
                     );
                 }
             });
+
+            return;
         }
+
+        // If there's not an implementation, only the first overload can be marked final.
+        if (overloads.length === 0) {
+            return;
+        }
+
+        overloads.slice(1).forEach((overload, index) => {
+            if (FunctionType.isFinal(overload) && overload.shared.declaration?.node) {
+                this._evaluator.addDiagnostic(
+                    DiagnosticRule.reportInconsistentOverload,
+                    LocMessage.overloadFinalNoImpl(),
+                    getNameNodeForDeclaration(overload.shared.declaration) ?? overload.shared.declaration.node
+                );
+            }
+
+            if (FunctionType.isOverridden(overload) && overload.shared.declaration?.node) {
+                this._evaluator.addDiagnostic(
+                    DiagnosticRule.reportInconsistentOverload,
+                    LocMessage.overloadOverrideNoImpl(),
+                    getNameNodeForDeclaration(overload.shared.declaration) ?? overload.shared.declaration.node
+                );
+            }
+        });
     }
 
     // For a TypedDict class that derives from another TypedDict class
@@ -6578,6 +6572,14 @@ export class Checker extends ParseTreeWalker {
             if (impl && isFunction(impl)) {
                 overrideFunction = impl;
             }
+
+            // If there is no implementation present, use the first overload.
+            if (!impl) {
+                const overloads = OverloadedType.getOverloads(overrideType);
+                if (overloads.length > 0) {
+                    overrideFunction = overloads[0];
+                }
+            }
         } else if (isClassInstance(overrideType) && ClassType.isPropertyClass(overrideType)) {
             if (overrideType.priv.fgetInfo) {
                 overrideFunction = overrideType.priv.fgetInfo.methodType;
@@ -6635,7 +6637,7 @@ export class Checker extends ParseTreeWalker {
             selfSpecializeClass(childClassType, { useBoundTypeVars: true })
         );
 
-        const baseType = partiallySpecializeType(
+        let baseType = partiallySpecializeType(
             this._evaluator.getEffectiveTypeOfSymbol(baseClassAndSymbol.symbol),
             baseClass,
             this._evaluator.getTypeClassType(),
@@ -6651,6 +6653,7 @@ export class Checker extends ParseTreeWalker {
 
         if (childClassType.shared.typeVarScopeId) {
             overrideType = makeTypeVarsBound(overrideType, [childClassType.shared.typeVarScopeId]);
+            baseType = makeTypeVarsBound(baseType, [childClassType.shared.typeVarScopeId]);
         }
 
         if (isFunction(baseType) || isOverloaded(baseType)) {

@@ -860,6 +860,10 @@
             "message": "Object of type \"None\" cannot be used with \"with\"",
             "comment": "{Locked='None','with'}"
         },
+        "noneNotUsableWithAsync": {
+            "message": "Object of type \"None\" cannot be used with \"async with\"",
+            "comment": "{Locked='None','with', 'async}"
+        },
         "noneOperator": {
             "message": "Operator \"{operator}\" not supported for \"None\"",
             "comment": "{Locked='None'}"
@@ -904,15 +908,23 @@
             "message": "Overloads for \"{name}\" use @classmethod inconsistently",
             "comment": "{Locked='@classmethod'}"
         },
-        "overloadFinalInconsistencyImpl": {
-            "message": "Overload for \"{name}\" is marked @final but implementation is not",
+        "overloadFinalImpl": {
+            "message": "@final decorator should be applied only to the implementation",
             "comment": "{Locked='@final'}"
         },
-        "overloadFinalInconsistencyNoImpl": {
-            "message": "Overload {index} for \"{name}\" is marked @final but overload 1 is not",
+        "overloadFinalNoImpl": {
+            "message": "Only the first overload should be marked @final",
             "comment": "{Locked='@final'}"
         },
         "overloadImplementationMismatch": "Overloaded implementation is not consistent with signature of overload {index}",
+        "overloadOverrideImpl": {
+            "message": "@override decorator should be applied only to the implementation",
+            "comment": "{Locked='@override'}"
+        },
+        "overloadOverrideNoImpl": {
+            "message": "Only the first overload should be marked @override",
+            "comment": "{Locked='@override'}"
+        },
         "overloadReturnTypeMismatch": "Overload {prevIndex} for \"{name}\" overlaps overload {newIndex} and returns an incompatible type",
         "overloadStaticMethodInconsistent": {
             "message": "Overloads for \"{name}\" use @staticmethod inconsistently",
@@ -996,6 +1008,7 @@
         },
         "patternNeverMatches": "Pattern will never be matched for subject type \"{type}\"",
         "positionArgAfterNamedArg": "Positional argument cannot appear after keyword arguments",
+        "positionArgAfterUnpackedDictArg": "Positional argument cannot appear after keyword argument unpacking",
         "positionOnlyAfterArgs": "Position-only parameter separator not allowed after \"*\" parameter",
         "positionOnlyAfterKeywordOnly": "\"/\" parameter must appear before \"*\" parameter",
         "positionOnlyAfterNon": "Position-only parameter not allowed after parameter that is not position-only",
@@ -1332,7 +1345,11 @@
         "typeNotSupportBinaryOperatorBidirectional": "Operator \"{operator}\" not supported for types \"{leftType}\" and \"{rightType}\" when expected type is \"{expectedType}\"",
         "typeNotSupportUnaryOperator": "Operator \"{operator}\" not supported for type \"{type}\"",
         "typeNotSupportUnaryOperatorBidirectional": "Operator \"{operator}\" not supported for type \"{type}\" when expected type is \"{expectedType}\"",
-        "typeNotUsableWith": "Object of type \"{type}\" cannot be used with \"with\" because it does not implement {method}",
+        "typeNotUsableWith": "Object of type \"{type}\" cannot be used with \"with\" because it does not correctly implement {method}",
+        "typeNotUsableWithAsync": {
+            "message": "Object of type \"{type}\" cannot be used with \"async with\" because it does not correctly implement {method}",
+            "comment": ["{Locked='async','with}"]
+    },
         "typeParameterBoundNotAllowed": {
             "message": "Bound or constraint cannot be used with a variadic type parameter or ParamSpec",
             "comment": ["{Locked='ParamSpec'}", "'variadic' means that it accepts a variable number of arguments"]
