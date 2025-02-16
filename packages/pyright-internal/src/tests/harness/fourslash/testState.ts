@@ -99,6 +99,7 @@ import {
 } from './testStateUtils';
 import { verifyWorkspaceEdit } from './workspaceEditTestUtils';
 import { Host } from '../../../common/host';
+import { PartialStubService } from '../../../partialStubService';
 
 export interface TextChange {
     span: TextRange;
@@ -170,7 +171,8 @@ export class TestState {
 
         this.fs = new PyrightFileSystem(this.testFS);
         this.console = new ConsoleWithLogLevel(new NullConsole(), 'test');
-        this.serviceProvider = createServiceProvider(this.testFS, this.fs, this.console);
+        const ps = new PartialStubService(this.fs);
+        this.serviceProvider = createServiceProvider(this.testFS, this.fs, this.console, ps);
 
         this._cancellationToken = new TestCancellationToken();
         this._hostSpecificFeatures = hostSpecificFeatures ?? new TestFeatures();
@@ -246,6 +248,13 @@ export class TestState {
             const file = this._vfsFiles[filePath] as vfs.File;
             if (file.meta?.[MetadataOptionNames.ipythonMode]) {
                 this.program.getSourceFile(Uri.file(filePath, this.serviceProvider))?.test_enableIPythonMode(true);
+            }
+            if (file.meta?.[MetadataOptionNames.chainedTo]) {
+                const chainedTo = file.meta[MetadataOptionNames.chainedTo] as string;
+                const to = this.program.getSourceFile(Uri.file(chainedTo, this.serviceProvider));
+                if (to) {
+                    this.program.updateChainedUri(Uri.file(filePath, this.serviceProvider), to.getUri());
+                }
             }
         }
     }

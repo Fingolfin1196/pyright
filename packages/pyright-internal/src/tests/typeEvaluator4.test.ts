@@ -28,7 +28,7 @@ test('Final1', () => {
 
 test('Final2', () => {
     const analysisResults = TestUtils.typeAnalyzeSampleFiles(['final2.py']);
-    TestUtils.validateResults(analysisResults, 12);
+    TestUtils.validateResults(analysisResults, 15);
 });
 
 test('Final3', () => {
@@ -86,11 +86,11 @@ test('FString1', () => {
 
     configOptions.defaultPythonVersion = pythonVersion3_11;
     const analysisResults1 = TestUtils.typeAnalyzeSampleFiles(['fstring1.py'], configOptions);
-    TestUtils.validateResults(analysisResults1, 14, 1);
+    TestUtils.validateResults(analysisResults1, 15, 1);
 
     configOptions.defaultPythonVersion = pythonVersion3_12;
     const analysisResults2 = TestUtils.typeAnalyzeSampleFiles(['fstring1.py'], configOptions);
-    TestUtils.validateResults(analysisResults2, 10, 1);
+    TestUtils.validateResults(analysisResults2, 11, 1);
 });
 
 test('FString2', () => {
@@ -265,7 +265,7 @@ test('MemberAccess28', () => {
 test('DataClassNamedTuple1', () => {
     const analysisResults = TestUtils.typeAnalyzeSampleFiles(['dataclassNamedTuple1.py']);
 
-    TestUtils.validateResults(analysisResults, 2);
+    TestUtils.validateResults(analysisResults, 6);
 });
 
 test('DataClassNamedTuple2', () => {
@@ -425,7 +425,7 @@ test('DataClassHash1', () => {
 test('DataClassDescriptors1', () => {
     const analysisResults = TestUtils.typeAnalyzeSampleFiles(['dataclassDescriptors1.py']);
 
-    TestUtils.validateResults(analysisResults, 1);
+    TestUtils.validateResults(analysisResults, 2);
 });
 
 test('DataClassDescriptors2', () => {

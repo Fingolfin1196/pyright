@@ -252,7 +252,7 @@ export class ReferencesProvider {
                 // See if the reference symbol's string is located somewhere within the file.
                 // If not, we can skip additional processing for the file.
                 const fileContents = curSourceFileInfo.sourceFile.getFileContent();
-                if (!fileContents || referencesResult.symbolNames.some((s) => fileContents.search(s) >= 0)) {
+                if (!fileContents || referencesResult.symbolNames.some((s) => fileContents.indexOf(s) >= 0)) {
                     this.addReferencesToResult(
                         curSourceFileInfo.sourceFile.getUri(),
                         includeDeclaration,
@@ -498,7 +498,15 @@ function isVisibleOutside(evaluator: TypeEvaluator, currentUri: Uri, node: NameN
     // Return true if the scope that contains the specified node is visible
     // outside of the current module, false if not.
     function isContainerExternallyVisible(node: NameNode, recursionCount: number) {
-        const scopingNode = ParseTreeUtils.getEvaluationScopeNode(node).node;
+        let scopingNodeInfo = ParseTreeUtils.getEvaluationScopeNode(node);
+        let scopingNode = scopingNodeInfo.node;
+
+        // If this is a type parameter scope, it acts as a proxy for
+        // its outer (parent) scope.
+        while (scopingNodeInfo.useProxyScope && scopingNodeInfo.node.parent) {
+            scopingNodeInfo = ParseTreeUtils.getEvaluationScopeNode(scopingNodeInfo.node.parent);
+            scopingNode = scopingNodeInfo.node;
+        }
 
         switch (scopingNode.nodeType) {
             case ParseNodeType.Class:
