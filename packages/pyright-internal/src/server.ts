@@ -61,7 +61,14 @@ export class PyrightServer extends LanguageServerBase {
         const cacheManager = new CacheManager(maxWorkers);
         const partialStubService = new PartialStubService(pyrightFs);
 
-        const serviceProvider = createServiceProvider(pyrightFs, tempFile, console, cacheManager, partialStubService);
+        const serviceProvider = createServiceProvider(
+            pyrightFs,
+            tempFile,
+            console,
+            cacheManager,
+            partialStubService,
+            new FileBasedCancellationProvider('bg')
+        );
 
         // When executed from CLI command (pyright-langserver), __rootDirectory is
         // already defined. When executed from VSCode extension, rootDirectory should
@@ -76,7 +83,6 @@ export class PyrightServer extends LanguageServerBase {
                 version,
                 serviceProvider,
                 fileWatcherHandler: fileWatcherProvider,
-                cancellationProvider: new FileBasedCancellationProvider('bg'),
                 maxAnalysisTimeInForeground,
                 supportedCodeActions: [CodeActionKind.QuickFix, CodeActionKind.SourceOrganizeImports],
             },
@@ -224,7 +230,7 @@ export class PyrightServer extends LanguageServerBase {
             return undefined;
         }
 
-        return new BackgroundAnalysis(this.serverOptions.serviceProvider);
+        return new BackgroundAnalysis(workspaceRoot, this.serverOptions.serviceProvider);
     }
 
     protected override createHost(): Host {
@@ -271,11 +277,13 @@ export class PyrightServer extends LanguageServerBase {
     protected createProgressReporter(): ProgressReporter {
         // The old progress notifications are kept for backwards compatibility with
         // clients that do not support work done progress.
-
+        let displayingProgress = false;
         let workDoneProgress: Promise<WorkDoneProgressServerReporter> | undefined;
         return {
+            isDisplayingProgess: () => displayingProgress,
             isEnabled: (data: AnalysisResults) => true,
             begin: () => {
+                displayingProgress = true;
                 if (this.client.hasWindowProgressCapability) {
                     workDoneProgress = this.connection.window.createWorkDoneProgress();
                     workDoneProgress
@@ -299,6 +307,7 @@ export class PyrightServer extends LanguageServerBase {
                 }
             },
             end: () => {
+                displayingProgress = false;
                 if (workDoneProgress) {
                     workDoneProgress
                         .then((progress) => {

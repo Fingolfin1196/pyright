@@ -272,7 +272,7 @@ export class Binder extends ParseTreeWalker {
 
         this._addTypingImportAliasesFromBuiltinsScope();
 
-        this._createNewScope(
+        const moduleScope = this._createNewScope(
             isBuiltInModule ? ScopeType.Builtin : ScopeType.Module,
             this._fileInfo.builtinsScope,
             /* proxyScope */ undefined,
@@ -310,17 +310,24 @@ export class Binder extends ParseTreeWalker {
         // Perform all analysis that was deferred during the first pass.
         this._bindDeferred();
 
-        // Use the __all__ list to determine whether any potential private
-        // symbols should be made externally hidden or private.
-        this._potentialHiddenSymbols.forEach((symbol, name) => {
-            if (!this._dunderAllNames?.some((sym) => sym === name)) {
-                if (this._fileInfo.isStubFile) {
-                    symbol.setIsExternallyHidden();
-                } else {
-                    symbol.setPrivatePyTypedImport();
+        if (this._fileInfo.isModulePrivate) {
+            // All symbols in a private module are private outside of the package.
+            moduleScope.symbolTable.forEach((symbol) => {
+                symbol.setPrivatePyTypedImport();
+            });
+        } else {
+            // Use the __all__ list to determine whether any potential private
+            // symbols should be made externally hidden or private.
+            this._potentialHiddenSymbols.forEach((symbol, name) => {
+                if (!this._dunderAllNames?.some((sym) => sym === name)) {
+                    if (this._fileInfo.isStubFile) {
+                        symbol.setIsExternallyHidden();
+                    } else {
+                        symbol.setPrivatePyTypedImport();
+                    }
                 }
-            }
-        });
+            });
+        }
 
         this._potentialPrivateSymbols.forEach((symbol, name) => {
             if (!this._dunderAllNames?.some((sym) => sym === name)) {
@@ -379,12 +386,32 @@ export class Binder extends ParseTreeWalker {
             return true;
         }
 
-        // A source file was found, but the type stub was missing.
+        // See if a source file was found but it's not part of a py.typed
+        // library and no type stub is found.
+        let reportStubMissing = false;
         if (
             !importResult.isStubFile &&
             importResult.importType === ImportType.ThirdParty &&
             !importResult.pyTypedInfo
         ) {
+            reportStubMissing = true;
+
+            // If the import is a namespace package, it's possible that all of
+            // the targeted import symbols are py.typed submodules. In this case,
+            // suppress the missing stub diagnostic.
+            if (importResult.isNamespacePackage && node.parent?.nodeType === ParseNodeType.ImportFrom) {
+                if (
+                    node.parent.d.imports.every((importAs) => {
+                        const implicitImport = importResult.filteredImplicitImports.get(importAs.d.name.d.value);
+                        return !!implicitImport?.pyTypedInfo;
+                    })
+                ) {
+                    reportStubMissing = false;
+                }
+            }
+        }
+
+        if (reportStubMissing) {
             const diagnostic = this._addDiagnostic(
                 DiagnosticRule.reportMissingTypeStubs,
                 LocMessage.stubFileMissing().format({ importName: importResult.importName }),

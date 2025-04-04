@@ -1488,11 +1488,9 @@ export class Checker extends ParseTreeWalker {
         const type = typeResult?.type ?? UnknownType.create();
 
         const leftExprType = this._evaluator.getType(node.d.leftExpr);
-        this._reportDeprecatedUseForType(
-            node.d.member,
-            type,
-            leftExprType && isModule(leftExprType) && leftExprType.priv.moduleName === 'typing'
-        );
+        const moduleName = leftExprType && isModule(leftExprType) ? leftExprType.priv.moduleName : undefined;
+        const isImportedFromTyping = moduleName === 'typing' || moduleName === 'typing_extensions';
+        this._reportDeprecatedUseForType(node.d.member, type, isImportedFromTyping);
 
         if (typeResult?.memberAccessDeprecationInfo) {
             this._reportDeprecatedUseForMemberAccess(node.d.member, typeResult.memberAccessDeprecationInfo);
@@ -1596,7 +1594,8 @@ export class Checker extends ParseTreeWalker {
         let isImportFromTyping = false;
         if (node.parent?.nodeType === ParseNodeType.ImportFrom) {
             if (node.parent.d.module.d.leadingDots === 0 && node.parent.d.module.d.nameParts.length === 1) {
-                if (node.parent.d.module.d.nameParts[0].d.value === 'typing') {
+                const namePart = node.parent.d.module.d.nameParts[0].d.value;
+                if (namePart === 'typing' || namePart === 'typing_extensions') {
                     isImportFromTyping = true;
                 }
             }
@@ -2128,6 +2127,7 @@ export class Checker extends ParseTreeWalker {
     // have overlapping types.
     private _validateComparisonTypes(node: BinaryOperationNode) {
         let rightExpression = node.d.rightExpr;
+        const assumeIsOperator = node.d.operator === OperatorType.Is || node.d.operator === OperatorType.IsNot;
 
         // Check for chained comparisons.
         if (
@@ -2203,7 +2203,7 @@ export class Checker extends ParseTreeWalker {
                         return;
                     }
 
-                    if (this._evaluator.isTypeComparable(leftSubtype, rightSubtype)) {
+                    if (this._evaluator.isTypeComparable(leftSubtype, rightSubtype, assumeIsOperator)) {
                         isComparable = true;
                     }
 
@@ -4788,11 +4788,7 @@ export class Checker extends ParseTreeWalker {
                     // If the function consists entirely of "...", assume that it's
                     // an abstract method or a protocol method and don't require that
                     // the return type matches. This check can also be skipped for an overload.
-                    if (
-                        !ParseTreeUtils.isSuiteEmpty(node.d.suite) &&
-                        !FunctionType.isOverloaded(functionType) &&
-                        !FunctionType.isAsync(functionType)
-                    ) {
+                    if (!ParseTreeUtils.isSuiteEmpty(node.d.suite) && !FunctionType.isOverloaded(functionType)) {
                         this._evaluator.addDiagnostic(
                             DiagnosticRule.reportReturnType,
                             LocMessage.noReturnReturnsNone(),
@@ -6643,11 +6639,18 @@ export class Checker extends ParseTreeWalker {
             selfSpecializeClass(childClassType, { useBoundTypeVars: true })
         );
 
+        // The "Self" value for the base class depends on whether it's a
+        // protocol or not. It's not clear from the typing spec whether
+        // this is the correct behavior.
+        const baseClassSelf = ClassType.isProtocolClass(baseClass)
+            ? childClassSelf
+            : ClassType.cloneAsInstance(selfSpecializeClass(baseClass, { useBoundTypeVars: true }));
+
         let baseType = partiallySpecializeType(
             this._evaluator.getEffectiveTypeOfSymbol(baseClassAndSymbol.symbol),
             baseClass,
             this._evaluator.getTypeClassType(),
-            childClassSelf
+            baseClassSelf
         );
 
         overrideType = partiallySpecializeType(
