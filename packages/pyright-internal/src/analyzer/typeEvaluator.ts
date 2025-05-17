@@ -6236,7 +6236,7 @@ export function createTypeEvaluator(
             type,
             (subtype) => {
                 const concreteSubtype = makeTopLevelTypeVarsConcrete(subtype);
-                const isClassMember = !memberInfo || memberInfo.isClassMember;
+                const isClassMember = !memberInfo || (memberInfo.isClassMember && !memberInfo.isSlotsMember);
                 let resultType: Type;
 
                 if (isClass(concreteSubtype) && isClassMember && errorNode) {
@@ -8891,38 +8891,40 @@ export function createTypeEvaluator(
 
             let reportError = false;
 
-            if (isAnyOrUnknown(secondArgConcreteType)) {
-                // Ignore unknown or any types.
-            } else if (isClassInstance(secondArgConcreteType)) {
-                if (isInstantiableClass(concreteTargetClassType)) {
-                    if (
-                        !derivesFromClassRecursive(
-                            ClassType.cloneAsInstantiable(secondArgConcreteType),
-                            concreteTargetClassType,
-                            /* ignoreUnknown */ true
-                        )
-                    ) {
-                        reportError = true;
+            doForEachSubtype(secondArgConcreteType, (secondArgSubtype) => {
+                if (isAnyOrUnknown(secondArgSubtype)) {
+                    // Ignore unknown or any types.
+                } else if (isClassInstance(secondArgSubtype)) {
+                    if (isInstantiableClass(concreteTargetClassType)) {
+                        if (
+                            !derivesFromClassRecursive(
+                                ClassType.cloneAsInstantiable(secondArgSubtype),
+                                concreteTargetClassType,
+                                /* ignoreUnknown */ true
+                            )
+                        ) {
+                            reportError = true;
+                        }
                     }
-                }
-                bindToType = secondArgConcreteType;
-            } else if (isInstantiableClass(secondArgConcreteType)) {
-                if (isInstantiableClass(concreteTargetClassType)) {
-                    if (
-                        !ClassType.isBuiltIn(concreteTargetClassType, 'type') &&
-                        !derivesFromClassRecursive(
-                            secondArgConcreteType,
-                            concreteTargetClassType,
-                            /* ignoreUnknown */ true
-                        )
-                    ) {
-                        reportError = true;
+                    bindToType = secondArgSubtype;
+                } else if (isInstantiableClass(secondArgSubtype)) {
+                    if (isInstantiableClass(concreteTargetClassType)) {
+                        if (
+                            !ClassType.isBuiltIn(concreteTargetClassType, 'type') &&
+                            !derivesFromClassRecursive(
+                                secondArgSubtype,
+                                concreteTargetClassType,
+                                /* ignoreUnknown */ true
+                            )
+                        ) {
+                            reportError = true;
+                        }
                     }
+                    bindToType = secondArgSubtype;
+                } else {
+                    reportError = true;
                 }
-                bindToType = secondArgConcreteType;
-            } else {
-                reportError = true;
-            }
+            });
 
             if (reportError) {
                 addDiagnostic(
@@ -17486,13 +17488,8 @@ export function createTypeEvaluator(
 
                         // Determine if the class is abstract. Protocol classes support abstract methods
                         // because they are constructed by the _ProtocolMeta metaclass, which derives
-                        // from ABCMeta. We'll exclude built-in protocol classes because these are known
-                        // not to contain any abstract methods and getAbstractMethods causes problems
-                        // because of dependencies on some of these built-in protocol classes.
-                        if (
-                            ClassType.supportsAbstractMethods(argType) ||
-                            (ClassType.isProtocolClass(argType) && !ClassType.isBuiltIn(argType))
-                        ) {
+                        // from ABCMeta.
+                        if (ClassType.supportsAbstractMethods(argType) || ClassType.isProtocolClass(argType)) {
                             classType.shared.flags |= ClassTypeFlags.SupportsAbstractMethods;
                         }
 
@@ -22223,7 +22220,9 @@ export function createTypeEvaluator(
                     const classTypeInfo = getTypeOfClass(classNode);
                     return {
                         type: classTypeInfo
-                            ? synthesizeTypeVarForSelfCls(classTypeInfo.classType, /* isClsParam */ true)
+                            ? TypeVarType.cloneAsBound(
+                                  synthesizeTypeVarForSelfCls(classTypeInfo.classType, /* isClsParam */ true)
+                              )
                             : UnknownType.create(),
                     };
                 }
